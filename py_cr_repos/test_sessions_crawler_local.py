@@ -74,6 +74,40 @@ package_infos = [
     }
 ]
 
+# 나이트 펀딩 패키지 정보
+night_package_infos = [
+    {
+        "idx": 27926,
+        "available_date": [
+            "2025-07-03", "2025-07-06",
+            "2025-07-09", "2025-07-12", "2025-07-22", "2025-07-24"
+        ],
+        "session_name": "펀딩 초급 2시간",
+        "minimum_funding_rate": 40,
+        "maximun_count": 60
+    },
+    {
+        "idx": 27925,
+        "available_date": [
+            "2025-07-02", "2025-07-07",
+            "2025-07-11", "2025-07-13", "2025-07-21", "2025-07-23"
+        ],
+        "session_name": "펀딩 중급 2시간",
+        "minimum_funding_rate": 40,
+        "maximun_count": 60
+    },
+    {
+        "idx": 27924,
+        "available_date": [
+            "2025-07-05", "2025-07-08",
+            "2025-07-10", "2025-07-25"
+        ],
+        "session_name": "펀딩 상급 2시간",
+        "minimum_funding_rate": 40,
+        "maximun_count": 40
+    }
+]
+
 code = "241511957"
 dateActive = "1"
 
@@ -97,6 +131,7 @@ waves_timetable = [
         "valid_from": "2025-07-05",
         "valid_to": "2025-07-25",
         "mapping": {
+            "09:00:00": "M4,M4(L)",
             "10:00:00": "T1,T2",
             "11:00:00": "M1(easy),M2(easy)",
             "12:00:00": "M4",
@@ -119,6 +154,96 @@ def get_valid_waves_mapping(target_date):
         if from_dt <= target_date <= to_dt:
             return item["mapping"]
     return {}
+
+def get_night_funding_sessions(night_pkg, pickdate):
+    """나이트 펀딩 세션 정보 가져오기"""
+    url = "https://www.wavepark.co.kr/packagebooking/reserv_pannel"
+    data = {
+        "idx": night_pkg["idx"],
+        "pick_date": pickdate
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.wavepark.co.kr/packagebooking/"
+    }
+    print(f"[나이트] {pickdate} {night_pkg['session_name']} 요청 payload: {json.dumps(data, ensure_ascii=False)}")
+    try:
+        response = requests.post(url, data=data, headers=headers)
+        print(f"[나이트] {pickdate} {night_pkg['session_name']} 응답코드: {response.status_code}")
+        night_sessions = []
+        if response.status_code == 200:
+            try:
+                res_json = response.json()
+                out_html = res_json.get('outHtml', '')
+                print(f"[나이트] {pickdate} {night_pkg['session_name']} outHtml 길이: {len(out_html)}")
+                
+                soup = BeautifulSoup(out_html, 'html.parser')
+                
+                # 세션 시간 정보 찾기
+                time_spans = soup.find_all('span', class_='time')
+                remain_spans = soup.find_all('span', class_='remain')
+                
+                print(f"[나이트] {pickdate} {night_pkg['session_name']} time_spans 개수: {len(time_spans)}")
+                print(f"[나이트] {pickdate} {night_pkg['session_name']} remain_spans 개수: {len(remain_spans)}")
+                
+                # HTML 내용 일부 로깅
+                if len(out_html) > 0:
+                    print(f"[나이트] {pickdate} {night_pkg['session_name']} HTML 일부: {out_html[:500]}...")
+                
+                print(f"[나이트] {pickdate} {night_pkg['session_name']} 파싱된 세션 개수: {len(time_spans)}")
+                
+                for i, time_span in enumerate(time_spans):
+                    if i < len(remain_spans):
+                        time_text = time_span.get_text(strip=True)
+                        remain_text = remain_spans[i].get_text(strip=True)
+                        
+                        print(f"[나이트] {pickdate} {night_pkg['session_name']} 세션 {i+1}: time='{time_text}', remain='{remain_text}'")
+                        
+                        # 시간 파싱 (예: "22:00 ~ 00:00" -> "22:00:00")
+                        time_parts = time_text.split('~')[0].strip()
+                        if len(time_parts) == 5:  # "22:00" 형식
+                            session_time = time_parts + ":00"
+                        else:
+                            session_time = time_parts
+                        
+                        # 잔여 수량 파싱 (예: "21/40" -> 21)
+                        remain_parts = remain_text.split('/')
+                        if len(remain_parts) >= 1:
+                            remain_count = remain_parts[0].strip()
+                            try:
+                                remain_count = int(remain_count)
+                            except ValueError:
+                                remain_count = 0
+                        else:
+                            remain_count = 0
+                        
+                        # left 값 계산 (minimum_funding_rate|maximun_count)
+                        left_value = f"{night_pkg['minimum_funding_rate']}|{night_pkg['maximun_count']}"
+                        
+                        night_session = {
+                            "time": session_time,
+                            "name": night_pkg["session_name"],
+                            "left": left_value,
+                            "right": remain_count,
+                            "isfunding": True,
+                            "islesson": False,
+                            "waves": ""
+                        }
+                        night_sessions.append(night_session)
+                        print(f"[나이트] {pickdate} {night_pkg['session_name']} 세션 {i+1} 생성: {night_session}")
+                        
+            except Exception as e:
+                print(f"[나이트] {pickdate} {night_pkg['session_name']} JSON/outHtml 파싱 오류: {e}")
+                print(f"[나이트] {pickdate} {night_pkg['session_name']} 응답 본문: {response.text[:1000]}")
+        else:
+            print(f"[나이트] {pickdate} {night_pkg['session_name']} API 응답코드 비정상: {response.status_code}")
+            print(f"[나이트] {pickdate} {night_pkg['session_name']} 응답 본문: {response.text[:500]}")
+        
+        print(f"[나이트] {pickdate} {night_pkg['session_name']} 최종 세션 수: {len(night_sessions)}")
+        return night_sessions
+    except Exception as e:
+        print(f"[나이트] {pickdate} {night_pkg['session_name']} 요청 예외: {e}")
+        return []
 
 def get_session_info(pkg, pickdate):
     """1차 API 크롤링 - 세션 정보 가져오기"""
@@ -242,6 +367,12 @@ def process_sessions(raw_sessions, date_str):
         else:
             time = s.get("picktime")
             islesson = False
+        
+        # time이 None이면 건너뛰기
+        if time is None:
+            print(f"[필터] time이 None인 세션 제외: {s}")
+            continue
+            
         # waves 자동 적용 (time만)
         waves = ""
         if time in waves_map:
@@ -256,8 +387,8 @@ def process_sessions(raw_sessions, date_str):
             "waves": waves
         }
         sessions.append(session_obj)
-    # 시간 오름차순 정렬
-    sessions.sort(key=lambda x: x["time"])
+    # 시간 오름차순 정렬 (None 값 제외)
+    sessions.sort(key=lambda x: x["time"] if x["time"] is not None else "99:99:99")
     return sessions
 
 def save_to_json(sessions_by_date, filename="wavepark_sessions_local.json"):
@@ -280,15 +411,16 @@ def print_summary(sessions_by_date):
         print(f"세션 수: {len(sessions)}")
         total_sessions += len(sessions)
         
-        # 첫 3개 세션만 출력
-        for i, session in enumerate(sessions[:3], 1):
+        # 첫 5개 세션만 출력
+        for i, session in enumerate(sessions[:5], 1):
             print(f"  {i}. {session['time']} - {session['name']}")
             print(f"     Left: {session['left']}, Right: {session['right']}")
             print(f"     Waves: {session['waves']}")
             print(f"     레슨: {'예' if session['islesson'] else '아니오'}")
+            print(f"     펀딩: {'예' if session['isfunding'] else '아니오'}")
         
-        if len(sessions) > 3:
-            print(f"  ... 외 {len(sessions) - 3}개 세션")
+        if len(sessions) > 5:
+            print(f"  ... 외 {len(sessions) - 5}개 세션")
     
     print(f"\n총 세션 수: {total_sessions}")
 
@@ -305,6 +437,8 @@ def main():
         print(f"\n=== {pickdate} 전체 패키지 크롤링 시작 ===")
         
         raw_sessions = []
+        
+        # 일반 세션 크롤링
         for pkg in package_infos:
             print(f"[START] {pickdate} {pkg['name']} ({pkg['packagecode']}) 크롤링 시작")
             sessions = get_session_info(pkg, pickdate)
@@ -333,6 +467,14 @@ def main():
             
             # 서버 부하 방지를 위한 딜레이
             time.sleep(1)
+        
+        # 나이트 펀딩 세션 크롤링
+        for night_pkg in night_package_infos:
+            if pickdate in night_pkg["available_date"]:
+                print(f"[START] {pickdate} {night_pkg['session_name']} 나이트 펀딩 크롤링 시작")
+                night_sessions = get_night_funding_sessions(night_pkg, pickdate)
+                raw_sessions.extend(night_sessions)
+                time.sleep(1)  # 서버 부하 방지
         
         processed_sessions = process_sessions(raw_sessions, pickdate)
         sessions_by_date[pickdate] = processed_sessions

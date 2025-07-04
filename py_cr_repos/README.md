@@ -7,15 +7,17 @@
 ```
 py_cr_repos/
 ├── py_wp_event_crawler.py          # Cloud Run용 이벤트 크롤러
-├── py_wp_sessions_crawl.py         # Cloud Run용 세션 크롤러
+├── py_wp_sessions_crawl.py         # Cloud Run용 세션 크롤러 (일반 + 나이트 펀딩)
 ├── test_event_crawler_local.py     # 로컬 테스트용 이벤트 크롤러
-├── test_sessions_crawler_local.py  # 로컬 테스트용 세션 크롤러
+├── test_sessions_crawler_local.py  # 로컬 테스트용 세션 크롤러 (일반 + 나이트 펀딩)
 ├── requirements.txt                # Cloud Run용 라이브러리
 ├── requirements_local.txt          # 로컬 테스트용 라이브러리
 ├── Dockerfile                      # Cloud Run 배포용
 ├── .dockerignore                   # Docker 빌드 제외 파일
 ├── deploy.sh                       # Cloud Run 배포 스크립트
+├── run_local_tests.bat             # Windows 로컬 테스트 배치 파일
 ├── README.md                       # 이 파일
+├── night_response.txt              # 나이트 펀딩 API 응답 예시
 └── crawler.py                      # 기존 크롤러 (참고용)
 ```
 
@@ -32,7 +34,7 @@ pip install -r requirements_local.txt
 python test_event_crawler_local.py
 ```
 
-#### 2. 세션 크롤러 테스트
+#### 2. 세션 크롤러 테스트 (일반 + 나이트 펀딩)
 ```bash
 # 세션 크롤러 실행
 python test_sessions_crawler_local.py
@@ -100,15 +102,33 @@ gcloud run deploy wavepark-event-crawler \
 
 ### 2. 세션 크롤러 (Session Crawler)
 
-웨이브파크 예약 시스템에서 세션 정보를 수집합니다.
+웨이브파크 예약 시스템에서 일반 세션과 나이트 펀딩 세션 정보를 수집합니다.
 
 #### 수집 정보
+
+**일반 세션:**
 - 세션 시간
 - 패키지명 (초급, 중급, 상급, Lv4 레슨, Lv5 레슨)
 - Left/Right 섹션 잔여 수량
 - Waves 정보
 - 레슨 여부
 - 펀딩 여부
+
+**나이트 펀딩 세션:**
+- 세션 시간 (22:00 ~ 00:00)
+- 패키지명 (펀딩 초급/중급/상급 2시간)
+- Left: 최소 펀딩률|최대 인원수 (예: "40|60")
+- Right: 잔여 좌석 수
+- 펀딩 여부: true
+- 레슨 여부: false
+
+#### 나이트 펀딩 세션 정보
+
+| 패키지 | 세션명 | 최소 펀딩률 | 최대 인원수 | 이용 가능 날짜 |
+|--------|--------|-------------|-------------|----------------|
+| idx: 27926 | 펀딩 초급 2시간 | 40% | 60명 | 2025-07-03, 06, 09, 12, 22, 24 |
+| idx: 27925 | 펀딩 중급 2시간 | 40% | 60명 | 2025-07-02, 07, 11, 13, 21, 23 |
+| idx: 27924 | 펀딩 상급 2시간 | 40% | 40명 | 2025-07-05, 08, 10, 25 |
 
 #### 사용법
 
@@ -150,6 +170,15 @@ gcloud run deploy wavepark-sessions-crawler \
       "isfunding": false,
       "islesson": true,
       "waves": "M1(E) , M2(E)"
+    },
+    {
+      "time": "22:00:00",
+      "name": "펀딩 상급 2시간",
+      "left": "40|40",
+      "right": 21,
+      "isfunding": true,
+      "islesson": false,
+      "waves": ""
     }
   ]
 }
@@ -235,6 +264,15 @@ gcloud scheduler jobs create http wavepark-sessions-crawler-job \
       "isfunding": false,
       "islesson": false,
       "waves": "M4 , T1"
+    },
+    {
+      "time": "22:00:00",
+      "name": "펀딩 상급 2시간",
+      "left": "40|40",
+      "right": 21,
+      "isfunding": true,
+      "islesson": false,
+      "waves": ""
     }
   ]
 }
@@ -266,6 +304,7 @@ gcloud scheduler jobs create http wavepark-sessions-crawler-job \
    python test_sessions_crawler_local.py
    ```
    - 3일치 세션 정보 크롤링 (테스트용)
+   - 일반 세션 + 나이트 펀딩 세션 모두 수집
    - JSON 파일로 결과 저장
    - 콘솔에 요약 정보 출력
 
@@ -317,6 +356,7 @@ gcloud scheduler jobs create http wavepark-sessions-crawler-job \
 - 패키지 정보 업데이트 (세션 크롤러)
 - Waves timetable 업데이트
 - 새로운 이벤트 타입 추가
+- 나이트 펀딩 세션 정보 업데이트
 
 ### 버전 관리
 - 코드 변경 시 버전 태그 추가

@@ -78,6 +78,39 @@ package_infos = [
     }
 ]
 
+night_package_infos = [
+    {
+        "idx": 27926,
+        "available_date": [
+            "2025-07-03", "2025-07-06",
+            "2025-07-09", "2025-07-12", "2025-07-22", "2025-07-24"
+        ],
+        "session_name": "펀딩 초급 2시간",
+        "minimum_funding_rate": 40,
+        "maximun_count": 60
+    },
+    {
+        "idx": 27925,
+        "available_date": [
+            "2025-07-02", "2025-07-07",
+            "2025-07-11", "2025-07-13", "2025-07-21", "2025-07-23"
+        ],
+        "session_name": "펀딩 중급 2시간",
+        "minimum_funding_rate": 40,
+        "maximun_count": 60
+    },
+    {
+        "idx": 27924,
+        "available_date": [
+            "2025-07-05", "2025-07-08",
+            "2025-07-10", "2025-07-25"
+        ],
+        "session_name": "펀딩 상급 2시간",
+        "minimum_funding_rate": 40,
+        "maximun_count": 40
+    }
+]
+
 code = "241511957"
 dateActive = "1"
 
@@ -101,12 +134,30 @@ waves_timetable = [
         "valid_from": "2025-07-05",
         "valid_to": "2025-07-25",
         "mapping": {
+            "09:00:00": "M4,M4(L)",
             "10:00:00": "T1,T2",
             "11:00:00": "M1(easy),M2(easy)",
             "12:00:00": "M4",
             "13:00:00": "M1,M2",
             "14:00:00": "M2,M3,M4",
             "15:00:00": "M1,M2,M3",
+            "16:00:00": "M3,M4",
+            "17:00:00": "M2,M3",
+            "18:00:00": "M4,T1",
+            "19:00:00": "T1,T2"
+        }
+    },
+    {
+        "valid_from": "2025-07-26",
+        "valid_to": "2025-08-17",
+        "mapping": {
+             "09:00:00": "M4,M4(L)",
+            "10:00:00": "T1,T2",
+            "11:00:00": "M1(easy),M2(easy)",
+            "12:00:00": "M4",
+            "13:00:00": "M1,M2",
+            "14:00:00": "M2,M3,M4",
+            "15:00:00": "M1,M2,M3(easy)",
             "16:00:00": "M3,M4",
             "17:00:00": "M2,M3",
             "18:00:00": "M4,T1",
@@ -123,6 +174,97 @@ def get_valid_waves_mapping(target_date):
         if from_dt <= target_date <= to_dt:
             return item["mapping"]
     return {}
+
+# 나이트 펀딩 세션 크롤링 함수
+def get_night_funding_sessions(night_pkg, pickdate):
+    """나이트 펀딩 세션 정보 가져오기"""
+    url = "https://www.wavepark.co.kr/packagebooking/reserv_pannel"
+    data = {
+        "idx": night_pkg["idx"],
+        "pickdate": pickdate
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.wavepark.co.kr/packagebooking/"
+    }
+    logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} 요청 payload: {json.dumps(data, ensure_ascii=False)}")
+    try:
+        response = requests.post(url, data=data, headers=headers)
+        logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} 응답코드: {response.status_code}")
+        night_sessions = []
+        if response.status_code == 200:
+            try:
+                res_json = response.json()
+                out_html = res_json.get('outHtml', '')
+                logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} outHtml 길이: {len(out_html)}")
+                
+                soup = BeautifulSoup(out_html, 'html.parser')
+                
+                # 세션 시간 정보 찾기
+                time_spans = soup.find_all('span', class_='time')
+                remain_spans = soup.find_all('span', class_='remain')
+                
+                logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} time_spans 개수: {len(time_spans)}")
+                logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} remain_spans 개수: {len(remain_spans)}")
+                
+                # HTML 내용 일부 로깅
+                if len(out_html) > 0:
+                    logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} HTML 일부: {out_html[:500]}...")
+                
+                logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} 파싱된 세션 개수: {len(time_spans)}")
+                
+                for i, time_span in enumerate(time_spans):
+                    if i < len(remain_spans):
+                        time_text = time_span.get_text(strip=True)
+                        remain_text = remain_spans[i].get_text(strip=True)
+                        
+                        logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} 세션 {i+1}: time='{time_text}', remain='{remain_text}'")
+                        
+                        # 시간 파싱 (예: "22:00 ~ 00:00" -> "22:00:00")
+                        time_parts = time_text.split('~')[0].strip()
+                        if len(time_parts) == 5:  # "22:00" 형식
+                            session_time = time_parts + ":00"
+                        else:
+                            session_time = time_parts
+                        
+                        # 잔여 수량 파싱 (예: "21/40" -> 21)
+                        remain_parts = remain_text.split('/')
+                        if len(remain_parts) >= 1:
+                            remain_count = remain_parts[0].strip()
+                            try:
+                                remain_count = int(remain_count)
+                            except ValueError:
+                                remain_count = 0
+                        else:
+                            remain_count = 0
+                        
+                        # left 값 계산 (minimum_funding_rate|maximun_count)
+                        left_value = f"{night_pkg['minimum_funding_rate']}|{night_pkg['maximun_count']}"
+                        
+                        night_session = {
+                            "time": session_time,
+                            "name": night_pkg["session_name"],
+                            "left": left_value,
+                            "right": remain_count,
+                            "isfunding": True,
+                            "islesson": False,
+                            "waves": ""
+                        }
+                        night_sessions.append(night_session)
+                        logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} 세션 {i+1} 생성: {night_session}")
+                        
+            except Exception as e:
+                logger.error(f"[나이트] {pickdate} {night_pkg['session_name']} JSON/outHtml 파싱 오류: {e}", exc_info=True)
+                logger.error(f"[나이트] {pickdate} {night_pkg['session_name']} 응답 본문: {response.text[:1000]}")
+        else:
+            logger.error(f"[나이트] {pickdate} {night_pkg['session_name']} API 응답코드 비정상: {response.status_code}")
+            logger.error(f"[나이트] {pickdate} {night_pkg['session_name']} 응답 본문: {response.text[:500]}")
+        
+        logger.info(f"[나이트] {pickdate} {night_pkg['session_name']} 최종 세션 수: {len(night_sessions)}")
+        return night_sessions
+    except Exception as e:
+        logger.error(f"[나이트] {pickdate} {night_pkg['session_name']} 요청 예외: {e}", exc_info=True)
+        return []
 
 # 3. 1차 API 크롤링
 def get_session_info(pkg, pickdate):
@@ -164,7 +306,7 @@ def get_session_info(pkg, pickdate):
                     session = {
                         "itemidx": li.get('data-itemidx'),
                         "pickdatetime": li.get('data-pickdatetime'),
-                        "picktime": li.get('data-picktime'),
+                        "time": li.get('data-picktime'),
                         "schidx": li.get('data-schidx'),
                         "limit_cnt": li.get('data-limit_cnt')
                     }
@@ -195,7 +337,7 @@ def get_section_limitsqty(s, pannelCnt=1):
     data = {
         "limit_cnt": s["limit_cnt"],
         "schidx": s["schidx"],
-        "picktime": s["picktime"],
+        "picktime": s["time"],
         "pickdatetime": s["pickdatetime"],
         "itemidx": s["itemidx"],
         "pannelCnt": pannelCnt
@@ -247,8 +389,14 @@ def process_sessions(raw_sessions, date_str):
             time = "13:00:00"
             islesson = True
         else:
-            time = s.get("picktime")
+            time = s.get("time")
             islesson = False
+        
+        # time이 None이면 건너뛰기
+        if time is None:
+            logger.warning(f"[필터] time이 None인 세션 제외: {s}")
+            continue
+            
         # waves 자동 적용 (time만)
         waves = ""
         if time in waves_map:
@@ -263,8 +411,8 @@ def process_sessions(raw_sessions, date_str):
             "waves": waves
         }
         sessions.append(session_obj)
-    # 시간 오름차순 정렬
-    sessions.sort(key=lambda x: x["time"])
+    # 시간 오름차순 정렬 (None 값 제외)
+    sessions.sort(key=lambda x: x["time"] if x["time"] is not None else "99:99:99")
     return sessions
 
 # 6. Firestore 병합 저장 (지난 세션/None 세션 제외)
@@ -321,6 +469,8 @@ def main(request):
         pickdate = (start_date + timedelta(days=day)).strftime('%Y-%m-%d')
         logger.info(f"=== {pickdate} 전체 패키지 크롤링 시작 ===")
         raw_sessions = []
+        
+        # 일반 세션 크롤링
         for pkg in package_infos:
             logger.info(f"[START] {pickdate} {pkg['name']} ({pkg['packagecode']}) 크롤링 시작")
             sessions = get_session_info(pkg, pickdate)
@@ -336,7 +486,7 @@ def main(request):
                     s["left"] = int(limitsqty.get("left") or 0)
                     s["right"] = int(limitsqty.get("right") or 0)
                 raw_sessions.append({
-                    "picktime": s.get("picktime"),  # 원본 picktime 유지
+                    "time": s.get("time"),  # 원본 picktime 유지
                     "name": s["name"],
                     "left": s.get("left"),
                     "right": s.get("right"),
@@ -344,6 +494,14 @@ def main(request):
                     "islesson": "레슨" in pkg["name"],
                     "waves": ""         # process_sessions에서 자동 매핑
                 })
+        
+        # 나이트 펀딩 세션 크롤링
+        for night_pkg in night_package_infos:
+            if pickdate in night_pkg["available_date"]:
+                logger.info(f"[START] {pickdate} {night_pkg['session_name']} 나이트 펀딩 크롤링 시작")
+                night_sessions = get_night_funding_sessions(night_pkg, pickdate)
+                raw_sessions.extend(night_sessions)
+        
         processed_sessions = process_sessions(raw_sessions, pickdate)
         save_to_firestore(db, pickdate, processed_sessions)
         logger.info(f"=== {pickdate} 전체 패키지 크롤링 및 저장 완료 ===")
