@@ -81,6 +81,7 @@ package_infos = [
 night_package_infos = [
     {
         "idx": 27926,
+        "isFunding": True,
         "available_date": [
             "2025-07-03", "2025-07-06",
             "2025-07-09", "2025-07-12", "2025-07-22", "2025-07-24"
@@ -91,6 +92,7 @@ night_package_infos = [
     },
     {
         "idx": 27925,
+        "isFunding": True,
         "available_date": [
             "2025-07-02", "2025-07-07",
             "2025-07-11", "2025-07-13", "2025-07-21", "2025-07-23"
@@ -99,8 +101,10 @@ night_package_infos = [
         "minimum_funding_rate": 40,
         "maximun_count": 60
     },
+
     {
         "idx": 27924,
+        "isFunding": True,
         "available_date": [
             "2025-07-05", "2025-07-08",
             "2025-07-10", "2025-07-25"
@@ -108,7 +112,87 @@ night_package_infos = [
         "session_name": "펀딩 상급 2시간",
         "minimum_funding_rate": 40,
         "maximun_count": 40
-    }
+    },
+
+    
+    # 25 / 7  중순 ~ 25 / 8월 말
+    {
+        "idx": 28856,
+        "isFunding": False,
+        "available_date": [
+            "2025-07-13", "2025-08-03",
+            "2025-08-17"
+        ],
+        "session_name": "나이트 초급 2시간",
+        "minimum_funding_rate": 0,
+        "maximun_count": 60
+    },
+    {
+        "idx": 28855,
+        "isFunding": False,
+        "available_date": [
+            "2025-07-12", "2025-07-27",
+            "2025-08-02", "2025-08-09", "2025-08-15", "2025-08-16"
+        ],
+        "session_name": "나이트 중급 2시간",
+        "minimum_funding_rate": 0,
+        "maximun_count": 60
+    },
+    {
+        "idx": 28854,
+        "isFunding": False,
+        "available_date": [
+            "2025-07-26"
+        ],
+        "session_name": "나이트 상급 2시간",
+        "minimum_funding_rate": 0,
+        "maximun_count": 60
+    },
+
+
+      # 25 / 7  중순 ~ 25 / 8월 말  Funding
+    {
+        "idx": 27926,
+        "isFunding": True,
+        "available_date": [
+            "2025-07-26", "2025-07-29",
+            "2025-07-31", "2025-08-02",
+            "2025-08-06", "2025-08-08",
+            "2025-08-11", "2025-08-14"
+        ],
+        "session_name": "펀딩 초급 2시간",
+        "minimum_funding_rate": 0,
+        "maximun_count": 60
+    },
+    {
+        "idx": 27925,
+        "isFunding": True,
+        "available_date": [
+            "2025-07-28", "2025-07-29",
+            "2025-07-30", "2025-07-31",
+            "2025-08-03", "2025-08-05",
+            "2025-08-06", "2025-08-07",
+            "2025-08-10", "2025-08-12",
+            "2025-08-14", "2025-08-17"
+        ],
+        "session_name": "펀딩 중급 2시간",
+        "minimum_funding_rate": 0,
+        "maximun_count": 60
+    },
+    {   
+        "idx": 27924,
+        "isFunding": True,
+        "available_date": [
+            "2025-07-27", "2025-08-01",
+            "2025-08-04", "2025-08-05",
+            "2025-08-07", "2025-08-09",
+            "2025-08-13", "2025-08-15",
+            "2025-08-16"
+        ],
+        "session_name": "펀딩 상급 2시간",
+        "minimum_funding_rate": 0,
+        "maximun_count": 60
+    },
 ]
 
 code = "241511957"
@@ -246,7 +330,8 @@ def get_night_funding_sessions(night_pkg, pickdate):
                             "name": night_pkg["session_name"],
                             "left": left_value,
                             "right": remain_count,
-                            "isfunding": True,
+                            "isfunding": night_pkg["isFunding"],
+                            "isNight": not night_pkg["isFunding"],
                             "islesson": False,
                             "waves": ""
                         }
@@ -408,6 +493,7 @@ def process_sessions(raw_sessions, date_str):
             "right": s.get("right"),
             "isfunding": s.get("isfunding", False),
             "islesson": islesson,
+            "isNight": s.get("isNight", False),
             "waves": waves
         }
         sessions.append(session_obj)
@@ -465,7 +551,7 @@ def main(request):
         })
     db = firestore.client()
     start_date = datetime.today()
-    for day in range(0, 14):
+    for day in range(0, 21):
         pickdate = (start_date + timedelta(days=day)).strftime('%Y-%m-%d')
         logger.info(f"=== {pickdate} 전체 패키지 크롤링 시작 ===")
         raw_sessions = []
@@ -492,6 +578,7 @@ def main(request):
                     "right": s.get("right"),
                     "isfunding": False,  # 추후 확장
                     "islesson": "레슨" in pkg["name"],
+                    "isNight": False,
                     "waves": ""         # process_sessions에서 자동 매핑
                 })
         
